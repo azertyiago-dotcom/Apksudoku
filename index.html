@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Sudoku</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, sans-serif; user-select: none; }
+body { background: #0f172a; color: #e2e8f0; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+h1 { font-size: 20px; letter-spacing: 4px; color: #38bdf8; margin-bottom: 15px; text-transform: uppercase; }
+#board { display: grid; grid-template-columns: repeat(9, 1fr); gap: 1px; background: #475569; border: 3px solid #38bdf8; border-radius: 8px; overflow: hidden; width: min(90vw, 380px); aspect-ratio: 1/1; }
+.cell { background: #1e293b; display: flex; align-items: center; justify-content: center; font-size: clamp(18px, 5vw, 24px); font-weight: 600; cursor: pointer; transition: background 0.15s; }
+.cell.fixed { color: #38bdf8; font-weight: 800; }
+.cell.user { color: #e2e8f0; }
+.cell.selected { background: #334155; }
+.cell.error { background: #7f1d1d; color: #fca5a5; }
+/* Bordures épaisses tous les 3 blocs */
+.cell:nth-child(3n) { border-right: 2px solid #475569; }
+.cell:nth-child(9n) { border-right: none; }
+.cell:nth-child(n+19):nth-child(-n+27),
+.cell:nth-child(n+46):nth-child(-n+54) { border-bottom: 2px solid #475569; }
+#pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 20px; width: min(90vw, 380px); }
+#pad button { padding: 14px 0; font-size: 18px; font-weight: 700; background: #1e293b; color: #38bdf8; border: 1px solid #334155; border-radius: 8px; cursor: pointer; }
+#pad button:active { background: #38bdf8; color: #0f172a; }
+#controls { display: flex; gap: 10px; margin-top: 15px; width: min(90vw, 380px); }
+#controls button { flex: 1; padding: 12px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; }
+.btn-new { background: #38bdf8; color: #0f172a; }
+.btn-easy { background: #16a34a; color: white; }
+.btn-hard { background: #dc2626; color: white; }
+.btn-erase { background: #475569; color: white; }
+#status { margin-top: 12px; font-size: 14px; height: 20px; color: #94a3b8; }
+.win { color: #22c55e !important; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>Sudoku</h1>
+<div id="board"></div>
+
+<div id="pad">
+  <button onclick="input(1)">1</button>
+  <button onclick="input(2)">2</button>
+  <button onclick="input(3)">3</button>
+  <button onclick="input(4)">4</button>
+  <button onclick="input(5)">5</button>
+  <button onclick="input(6)">6</button>
+  <button onclick="input(7)">7</button>
+  <button onclick="input(8)">8</button>
+  <button onclick="input(9)">9</button>
+  <button onclick="erase()" style="color:#f87171;">⌫</button>
+</div>
+
+<div id="controls">
+  <button class="btn-easy" onclick="newGame(40)">Facile</button>
+  <button class="btn-hard" onclick="newGame(52)">Difficile</button>
+  <button class="btn-new" onclick="newGame(46)">Moyen</button>
+</div>
+
+<div id="status"></div>
+
+<script>
+let solution = [];
+let puzzle = [];
+let selected = -1;
+let currentCells = [];
+
+function generateSolution() {
+  const grid = Array.from({length: 9}, () => Array(9).fill(0));
+  fillGrid(grid);
+  return grid;
+}
+
+function fillGrid(grid) {
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      if (grid[r][c] === 0) {
+        const nums = shuffle([1,2,3,4,5,6,7,8,9]);
+        for (const n of nums) {
+          if (isValid(grid, r, c, n)) {
+            grid[r][c] = n;
+            if (fillGrid(grid)) return true;
+            grid[r][c] = 0;
+          }
+        }
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function isValid(grid, r, c, n) {
+  for (let i = 0; i < 9; i++) {
+    if (grid[r][i] === n || grid[i][c] === n) return false;
+  }
+  const br = Math.floor(r/3)*3, bc = Math.floor(c/3)*3;
+  for (let i = 0; i < 3; i++)
+    for (let j = 0; j < 3; j++)
+      if (grid[br+i][bc+j] === n) return false;
+  return true;
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function newGame(holes) {
+  solution = generateSolution();
+  puzzle = solution.map(row => [...row]);
+  // Creuser les trous
+  let removed = 0;
+  while (removed < holes) {
+    const r = Math.floor(Math.random() * 9);
+    const c = Math.floor(Math.random() * 9);
+    if (puzzle[r][c] !== 0) {
+      puzzle[r][c] = 0;
+      removed++;
+    }
+  }
+  selected = -1;
+  render();
+  document.getElementById('status').textContent = '';
+  document.getElementById('status').className = '';
+}
+
+function render() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  currentCells = [];
+  for (let r = 0; r < 9; r++) {
+    for (let c = 0; c < 9; c++) {
+      const val = puzzle[r][c];
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      if (val !== 0) {
+        cell.textContent = val;
+        cell.classList.add(val === solution[r][c] ? 'fixed' : 'user');
+      }
+      if (selected === r * 9 + c) cell.classList.add('selected');
+      cell.onclick = () => { selected = r * 9 + c; render(); };
+      board.appendChild(cell);
+      currentCells.push(cell);
+    }
+  }
+}
+
+function input(n) {
+  if (selected < 0) return;
+  const r = Math.floor(selected / 9), c = selected % 9;
+  if (puzzle[r][c] === solution[r][c] && puzzle[r][c] !== 0) return; // case fixe
+  puzzle[r][c] = n;
+  render();
+  checkWin();
+}
+
+function erase() {
+  if (selected < 0) return;
+  const r = Math.floor(selected / 9), c = selected % 9;
+  if (puzzle[r][c] === solution[r][c] && puzzle[r][c] !== 0) return;
+  puzzle[r][c] = 0;
+  render();
+}
+
+function checkWin() {
+  for (let r = 0; r < 9; r++)
+    for (let c = 0; c < 9; c++)
+      if (puzzle[r][c] !== solution[r][c]) return;
+  const s = document.getElementById('status');
+  s.textContent = '🎉 Félicitations, grille résolue !';
+  s.className = 'win';
+}
+
+// Nouvelle partie au démarrage
+newGame(46);
+</script>
+</body>
+</html>
